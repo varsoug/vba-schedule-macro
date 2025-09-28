@@ -55,10 +55,13 @@ Sub Расписание()
     Dim minTestDate As Date, maxTestDate As Date
     Dim hasTestDate As Boolean
     Dim dictExam As Object, exKey As Variant, onlyExam As String
+    Dim rowIndex As Long
+    Dim examValue As String
 
     Set app = Application
     app.ScreenUpdating = False
 
+    Set dictExam = CreateObject("Scripting.Dictionary")
     ' Исходный лист — активный
     Set srcSheet = ActiveSheet
     lastRow = srcSheet.Cells(srcSheet.Rows.Count, "A").End(xlUp).Row
@@ -310,6 +313,15 @@ previousSubGroup = vbNullString
     For c = 1 To lastColOut
         If Trim$(CStr(dstSheet.Cells(1, c).Value)) = "Экзамен" Then exColHeader = c: Exit For
     Next c
+    If exColHeader > 0 Then
+        For rowIndex = 2 To dstRow - 1
+            examValue = Trim$(CStr(dstSheet.Cells(rowIndex, exColHeader).Value))
+            If Len(examValue) > 0 Then
+                If Not dictExam.Exists(examValue) Then dictExam.Add examValue, 1
+            End If
+        Next rowIndex
+    End If
+
 
     If dictExam.Count = 1 Then
         onlyExam = dictExam.Keys()(0)
@@ -324,7 +336,7 @@ previousSubGroup = vbNullString
 app.ScreenUpdating = True
     ' Добавлено: шапка расписания
     On Error Resume Next
-    Call AddScheduleHeader(dstSheet, lastColOut, dstRow - 1, IIf(hasTestDate, minTestDate, Empty), IIf(hasTestDate, maxTestDate, Empty), titleOverride), IIf(hasTestDate, maxTestDate, Empty), titleOverride)
+    Call AddScheduleHeader(dstSheet, lastColOut, dstRow - 1, IIf(hasTestDate, minTestDate, Empty), IIf(hasTestDate, maxTestDate, Empty), titleOverride)
     On Error GoTo 0
     MsgBox "Расписание готово"
 End Sub
