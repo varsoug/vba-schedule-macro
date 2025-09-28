@@ -6,18 +6,18 @@ Private Function NormalizePhone(ByVal v As Variant) As String
     Dim i As Long, ch As String
     s = CStr(v)
 
-    ' Вытащим только цифры
+    ' Г‚Г»ГІГ Г№ГЁГ¬ ГІГ®Г«ГјГЄГ® Г¶ГЁГґГ°Г»
     For i = 1 To Len(s)
         ch = Mid$(s, i, 1)
         If ch >= "0" And ch <= "9" Then digits = digits & ch
     Next i
 
-    ' Приведём к российскому формату
-    ' Варианты:
-    '  - 10 цифр (без кода страны) -> добавим ведущую 7
-    '  - 11 цифр, первая 8 -> заменим на 7
-    '  - 11 цифр, первая 7 -> ок
-    ' Остальное — возвращаем как было (без форматирования)
+    ' ГЏГ°ГЁГўГҐГ¤ВёГ¬ ГЄ Г°Г®Г±Г±ГЁГ©Г±ГЄГ®Г¬Гі ГґГ®Г°Г¬Г ГІГі
+    ' Г‚Г Г°ГЁГ Г­ГІГ»:
+    '  - 10 Г¶ГЁГґГ° (ГЎГҐГ§ ГЄГ®Г¤Г  Г±ГІГ°Г Г­Г») -> Г¤Г®ГЎГ ГўГЁГ¬ ГўГҐГ¤ГіГ№ГіГѕ 7
+    '  - 11 Г¶ГЁГґГ°, ГЇГҐГ°ГўГ Гї 8 -> Г§Г Г¬ГҐГ­ГЁГ¬ Г­Г  7
+    '  - 11 Г¶ГЁГґГ°, ГЇГҐГ°ГўГ Гї 7 -> Г®ГЄ
+    ' ГЋГ±ГІГ Г«ГјГ­Г®ГҐ вЂ” ГўГ®Г§ГўГ°Г Г№Г ГҐГ¬ ГЄГ ГЄ ГЎГ»Г«Г® (ГЎГҐГ§ ГґГ®Г°Г¬Г ГІГЁГ°Г®ГўГ Г­ГЁГї)
     If Len(digits) = 10 Then
         digits = "7" & digits
     ElseIf Len(digits) = 11 Then
@@ -32,12 +32,60 @@ Private Function NormalizePhone(ByVal v As Variant) As String
         Exit Function
     End If
 
-    ' Форматируем: +7 (XXX) XXX-XX-XX
+    Dim dictExam As Object, onlyExam As String
+    Dim singleTestDate As Boolean, singleTestTime As Boolean
+    Dim hasTestTime As Boolean
+    Dim minTestTime As Date, maxTestTime As Date
+    Dim firstTestDate As Variant, firstTestTime As Variant
+    Dim examValue As String
+    Dim dtVal As Variant, tmVal As Variant
+    Dim dt As Date, tm As Date
+    Dim removeDateColumn As Boolean, removeTimeColumn As Boolean
+    Dim dateColIndex As Long, timeColIndex As Long, phoneColIndex As Long
+    Dim headerText As String
+    Set dictExam = CreateObject("Scripting.Dictionary")
+    singleTestDate = True
+    singleTestTime = True
+            examValue = Trim$(CStr(tempSheet.Cells(tempRow, 1).Value))
+            If Len(examValue) > 0 Then
+                If Not dictExam.Exists(examValue) Then dictExam.Add examValue, 1
+            End If
+
+            dtVal = tempSheet.Cells(tempRow, 3).Value
+            If IsDate(dtVal) Then
+                dt = DateValue(CDate(dtVal))
+                If Not hasTestDate Then
+                    minTestDate = dt
+                    maxTestDate = dt
+                    hasTestDate = True
+                    firstTestDate = dt
+                Else
+                    If dt < minTestDate Then minTestDate = dt
+                    If dt > maxTestDate Then maxTestDate = dt
+                    If singleTestDate And dt <> firstTestDate Then singleTestDate = False
+                End If
+            End If
+
+            tmVal = tempSheet.Cells(tempRow, 8).Value
+            If IsDate(tmVal) Then
+                tm = TimeValue(CDate(tmVal))
+                If Not hasTestTime Then
+                    minTestTime = tm
+                    maxTestTime = tm
+                    hasTestTime = True
+                    firstTestTime = tm
+                Else
+                    If tm < minTestTime Then minTestTime = tm
+                    If tm > maxTestTime Then maxTestTime = tm
+                    If singleTestTime And tm <> firstTestTime Then singleTestTime = False
+                End If
+            End If
+
     NormalizePhone = "+7 (" & Mid$(digits, 2, 3) & ") " & _
                      Mid$(digits, 5, 3) & "-" & Mid$(digits, 8, 2) & "-" & Mid$(digits, 10, 2)
 End Function
 
-Sub Расписание()
+Sub ГђГ Г±ГЇГЁГ±Г Г­ГЁГҐ()
     Dim srcSheet As Worksheet, dstSheet As Worksheet, tempSheet As Worksheet
     Dim lastRow As Long, i As Long, dstRow As Long, tempRow As Long
     Dim fio As String
@@ -59,52 +107,52 @@ Sub Расписание()
     Set app = Application
     app.ScreenUpdating = False
 
-    ' Исходный лист — активный
+    ' Г€Г±ГµГ®Г¤Г­Г»Г© Г«ГЁГ±ГІ вЂ” Г ГЄГІГЁГўГ­Г»Г©
     Set srcSheet = ActiveSheet
     lastRow = srcSheet.Cells(srcSheet.Rows.Count, "A").End(xlUp).Row
 
-    ' Создаем новую книгу для результата
+    ' Г‘Г®Г§Г¤Г ГҐГ¬ Г­Г®ГўГіГѕ ГЄГ­ГЁГЈГі Г¤Г«Гї Г°ГҐГ§ГіГ«ГјГІГ ГІГ 
     Workbooks.Add
     Set dstSheet = ActiveSheet
 
-    ' Создаем временный лист
+    ' Г‘Г®Г§Г¤Г ГҐГ¬ ГўГ°ГҐГ¬ГҐГ­Г­Г»Г© Г«ГЁГ±ГІ
     Set tempSheet = dstSheet.Parent.Sheets.Add(After:=dstSheet)
     On Error Resume Next
     tempSheet.Name = "TempData"
     On Error GoTo 0
 
-    ' Заголовки временного листа (J = Работодатель)
+    ' Г‡Г ГЈГ®Г«Г®ГўГЄГЁ ГўГ°ГҐГ¬ГҐГ­Г­Г®ГЈГ® Г«ГЁГ±ГІГ  (J = ГђГ ГЎГ®ГІГ®Г¤Г ГІГҐГ«Гј)
     tempSheet.Range("A1:J1").Value = Array( _
-        "Заявка", "ФИО", "Дата рождения", "Телефон", "Гражданство", _
-        "Экзамен", "Аудитория", "Время", "Группа", "Работодатель")
+        "Г‡Г ГїГўГЄГ ", "Г”Г€ГЋ", "Г„Г ГІГ  Г°Г®Г¦Г¤ГҐГ­ГЁГї", "Г’ГҐГ«ГҐГґГ®Г­", "ГѓГ°Г Г¦Г¤Г Г­Г±ГІГўГ®", _
+        "ГќГЄГ§Г Г¬ГҐГ­", "ГЂГіГ¤ГЁГІГ®Г°ГЁГї", "Г‚Г°ГҐГ¬Гї", "ГѓГ°ГіГЇГЇГ ", "ГђГ ГЎГ®ГІГ®Г¤Г ГІГҐГ«Гј")
 
-    ' Сбор данных
+    ' Г‘ГЎГ®Г° Г¤Г Г­Г­Г»Гµ
     tempRow = 2
     For i = 2 To lastRow
-        If Trim(srcSheet.Cells(i, 29).Value) = "Активная" Then
+        If Trim(srcSheet.Cells(i, 29).Value) = "ГЂГЄГІГЁГўГ­Г Гї" Then
             fio = Trim(srcSheet.Cells(i, 1).Value & " " & srcSheet.Cells(i, 2).Value)
             If srcSheet.Cells(i, 3).Value <> "" Then fio = fio & " " & srcSheet.Cells(i, 3).Value
 
-            tempSheet.Cells(tempRow, 1).Value = srcSheet.Cells(i, 27).Value  ' Заявка
-            tempSheet.Cells(tempRow, 2).Value = fio                           ' ФИО
-            tempSheet.Cells(tempRow, 3).Value = srcSheet.Cells(i, 4).Value    ' ДР
+            tempSheet.Cells(tempRow, 1).Value = srcSheet.Cells(i, 27).Value  ' Г‡Г ГїГўГЄГ 
+            tempSheet.Cells(tempRow, 2).Value = fio                           ' Г”Г€ГЋ
+            tempSheet.Cells(tempRow, 3).Value = srcSheet.Cells(i, 4).Value    ' Г„Гђ
 
-            ' Телефон -> нормализуем к +7 (XXX) XXX-XX-XX
+            ' Г’ГҐГ«ГҐГґГ®Г­ -> Г­Г®Г°Г¬Г Г«ГЁГ§ГіГҐГ¬ ГЄ +7 (XXX) XXX-XX-XX
             tempSheet.Cells(tempRow, 4).Value = NormalizePhone(srcSheet.Cells(i, 5).Value)
 
-            tempSheet.Cells(tempRow, 5).Value = srcSheet.Cells(i, 6).Value    ' Гражданство
-            tempSheet.Cells(tempRow, 6).Value = srcSheet.Cells(i, 8).Value    ' Экзамен
-            tempSheet.Cells(tempRow, 7).Value = srcSheet.Cells(i, 10).Value   ' Аудитория
-            tempSheet.Cells(tempRow, 8).Value = srcSheet.Cells(i, 12).Value   ' Время
-            tempSheet.Cells(tempRow, 9).Value = srcSheet.Cells(i, 13).Value   ' Группа
-            tempSheet.Cells(tempRow, 10).Value = srcSheet.Cells(i, 14).Value  ' Работодатель (столбец N)
+            tempSheet.Cells(tempRow, 5).Value = srcSheet.Cells(i, 6).Value    ' ГѓГ°Г Г¦Г¤Г Г­Г±ГІГўГ®
+            tempSheet.Cells(tempRow, 6).Value = srcSheet.Cells(i, 8).Value    ' ГќГЄГ§Г Г¬ГҐГ­
+            tempSheet.Cells(tempRow, 7).Value = srcSheet.Cells(i, 10).Value   ' ГЂГіГ¤ГЁГІГ®Г°ГЁГї
+            tempSheet.Cells(tempRow, 8).Value = srcSheet.Cells(i, 12).Value   ' Г‚Г°ГҐГ¬Гї
+            tempSheet.Cells(tempRow, 9).Value = srcSheet.Cells(i, 13).Value   ' ГѓГ°ГіГЇГЇГ 
+            tempSheet.Cells(tempRow, 10).Value = srcSheet.Cells(i, 14).Value  ' ГђГ ГЎГ®ГІГ®Г¤Г ГІГҐГ«Гј (Г±ГІГ®Г«ГЎГҐГ¶ N)
 
             tempRow = tempRow + 1
         End If
     Next i
 
     If tempRow <= 2 Then
-        MsgBox "Нет активных записей для обработки.", vbInformation
+        MsgBox "ГЌГҐГІ Г ГЄГІГЁГўГ­Г»Гµ Г§Г ГЇГЁГ±ГҐГ© Г¤Г«Гї Г®ГЎГ°Г ГЎГ®ГІГЄГЁ.", vbInformation
         Application.DisplayAlerts = False
         On Error Resume Next: tempSheet.Delete: On Error GoTo 0
         Application.DisplayAlerts = True
@@ -112,10 +160,10 @@ Sub Расписание()
         Exit Sub
     End If
 
-    ' Есть ли где-либо указанный работодатель?
+    ' Г…Г±ГІГј Г«ГЁ ГЈГ¤ГҐ-Г«ГЁГЎГ® ГіГЄГ Г§Г Г­Г­Г»Г© Г°Г ГЎГ®ГІГ®Г¤Г ГІГҐГ«Гј?
     employersPresent = Application.WorksheetFunction.CountA(tempSheet.Range("J2:J" & tempRow - 1)) > 0
 
-    ' Сортировка: Экзамен -> Время -> Группа -> ФИО
+    ' Г‘Г®Г°ГІГЁГ°Г®ГўГЄГ : ГќГЄГ§Г Г¬ГҐГ­ -> Г‚Г°ГҐГ¬Гї -> ГѓГ°ГіГЇГЇГ  -> Г”Г€ГЋ
     With tempSheet.Sort
         .SortFields.Clear
         .SortFields.Add key:=tempSheet.Range("F2:F" & tempRow - 1), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
@@ -127,14 +175,14 @@ Sub Расписание()
         .Apply
     End With
 
-    ' Уникальные группы по секциям ("Экзамен + Время")
+    ' Г“Г­ГЁГЄГ Г«ГјГ­Г»ГҐ ГЈГ°ГіГЇГЇГ» ГЇГ® Г±ГҐГЄГ¶ГЁГїГ¬ ("ГќГЄГ§Г Г¬ГҐГ­ + Г‚Г°ГҐГ¬Гї")
     Set dictSectionGroups = CreateObject("Scripting.Dictionary")
     For i = 2 To tempRow - 1
-        ' Проверим смену даты (подзаголовок по дате)
+        ' ГЏГ°Г®ГўГҐГ°ГЁГ¬ Г±Г¬ГҐГ­Гі Г¤Г ГІГ» (ГЇГ®Г¤Г§Г ГЈГ®Г«Г®ГўГ®ГЄ ГЇГ® Г¤Г ГІГҐ)
         Dim currDate As Variant
-        currDate = tempSheet.Cells(i, 7).Value ' Дата тестирования в tempSheet
+        currDate = tempSheet.Cells(i, 7).Value ' Г„Г ГІГ  ГІГҐГ±ГІГЁГ°Г®ГўГ Г­ГЁГї Гў tempSheet
         If CStr(currDate) <> CStr(previousDate) Then
-            ' Вставим строку с датой
+            ' Г‚Г±ГІГ ГўГЁГ¬ Г±ГІГ°Г®ГЄГі Г± Г¤Г ГІГ®Г©
             
             If lastColOut < 1 Then lastColOut = 1
 If dstRow > 0 Then
@@ -163,7 +211,7 @@ previousSubGroup = vbNullString
         dictSectionGroups(key).Item(currentSubGroup) = 1
     Next i
 
-    ' Во всех ли секциях ровно одна группа?
+    ' Г‚Г® ГўГ±ГҐГµ Г«ГЁ Г±ГҐГЄГ¶ГЁГїГµ Г°Г®ГўГ­Г® Г®Г¤Г­Г  ГЈГ°ГіГЇГЇГ ?
     groupsAlwaysOne = True
     For Each key In dictSectionGroups.Keys
         If dictSectionGroups(key).Count > 1 Then
@@ -172,30 +220,30 @@ previousSubGroup = vbNullString
         End If
     Next key
 
-    ' Заголовки итогового листа
+    ' Г‡Г ГЈГ®Г«Г®ГўГЄГЁ ГЁГІГ®ГЈГ®ГўГ®ГЈГ® Г«ГЁГ±ГІГ 
     If groupsAlwaysOne Then
         If employersPresent Then
-            dstSheet.Range("A1:J1").Value = Array("№", "Заявка", "ФИО", "Дата рождения", "Телефон", _
-                                                  "Гражданство", "Экзамен", "Аудитория", "Время", "Работодатель")
+            dstSheet.Range("A1:J1").Value = Array("В№", "Г‡Г ГїГўГЄГ ", "Г”Г€ГЋ", "Г„Г ГІГ  Г°Г®Г¦Г¤ГҐГ­ГЁГї", "Г’ГҐГ«ГҐГґГ®Г­", _
+                                                  "ГѓГ°Г Г¦Г¤Г Г­Г±ГІГўГ®", "ГќГЄГ§Г Г¬ГҐГ­", "ГЂГіГ¤ГЁГІГ®Г°ГЁГї", "Г‚Г°ГҐГ¬Гї", "ГђГ ГЎГ®ГІГ®Г¤Г ГІГҐГ«Гј")
             lastColOut = 10
         Else
-            dstSheet.Range("A1:I1").Value = Array("№", "Заявка", "ФИО", "Дата рождения", "Телефон", _
-                                                  "Гражданство", "Экзамен", "Аудитория", "Время")
+            dstSheet.Range("A1:I1").Value = Array("В№", "Г‡Г ГїГўГЄГ ", "Г”Г€ГЋ", "Г„Г ГІГ  Г°Г®Г¦Г¤ГҐГ­ГЁГї", "Г’ГҐГ«ГҐГґГ®Г­", _
+                                                  "ГѓГ°Г Г¦Г¤Г Г­Г±ГІГўГ®", "ГќГЄГ§Г Г¬ГҐГ­", "ГЂГіГ¤ГЁГІГ®Г°ГЁГї", "Г‚Г°ГҐГ¬Гї")
             lastColOut = 9
         End If
     Else
         If employersPresent Then
-            dstSheet.Range("A1:K1").Value = Array("№", "Заявка", "ФИО", "Дата рождения", "Телефон", _
-                                                  "Гражданство", "Экзамен", "Аудитория", "Время", "Группа", "Работодатель")
+            dstSheet.Range("A1:K1").Value = Array("В№", "Г‡Г ГїГўГЄГ ", "Г”Г€ГЋ", "Г„Г ГІГ  Г°Г®Г¦Г¤ГҐГ­ГЁГї", "Г’ГҐГ«ГҐГґГ®Г­", _
+                                                  "ГѓГ°Г Г¦Г¤Г Г­Г±ГІГўГ®", "ГќГЄГ§Г Г¬ГҐГ­", "ГЂГіГ¤ГЁГІГ®Г°ГЁГї", "Г‚Г°ГҐГ¬Гї", "ГѓГ°ГіГЇГЇГ ", "ГђГ ГЎГ®ГІГ®Г¤Г ГІГҐГ«Гј")
             lastColOut = 11
         Else
-            dstSheet.Range("A1:J1").Value = Array("№", "Заявка", "ФИО", "Дата рождения", "Телефон", _
-                                                  "Гражданство", "Экзамен", "Аудитория", "Время", "Группа")
+            dstSheet.Range("A1:J1").Value = Array("В№", "Г‡Г ГїГўГЄГ ", "Г”Г€ГЋ", "Г„Г ГІГ  Г°Г®Г¦Г¤ГҐГ­ГЁГї", "Г’ГҐГ«ГҐГґГ®Г­", _
+                                                  "ГѓГ°Г Г¦Г¤Г Г­Г±ГІГўГ®", "ГќГЄГ§Г Г¬ГҐГ­", "ГЂГіГ¤ГЁГІГ®Г°ГЁГї", "Г‚Г°ГҐГ¬Гї", "ГѓГ°ГіГЇГЇГ ")
             lastColOut = 10
         End If
     End If
 
-    ' Перенос данных с заголовками/подзаголовками
+    ' ГЏГҐГ°ГҐГ­Г®Г± Г¤Г Г­Г­Г»Гµ Г± Г§Г ГЈГ®Г«Г®ГўГЄГ Г¬ГЁ/ГЇГ®Г¤Г§Г ГЈГ®Г«Г®ГўГЄГ Г¬ГЁ
     dstRow = 2
     previousGroup = ""
     previousSubGroup = ""
@@ -205,7 +253,7 @@ previousSubGroup = vbNullString
         currentGroup = Trim(CStr(tempSheet.Cells(i, 6).Value)) & " " & Format(tempSheet.Cells(i, 8).Value, "hh:mm")
         currentSubGroup = Trim(CStr(tempSheet.Cells(i, 9).Value))
 
-        ' Заголовок секции
+        ' Г‡Г ГЈГ®Г«Г®ГўГ®ГЄ Г±ГҐГЄГ¶ГЁГЁ
         If currentGroup <> previousGroup Then
             dstSheet.Cells(dstRow, 1).Value = UCase(currentGroup)
             
@@ -225,7 +273,7 @@ previousSubGroup = vbNullString
             numInGroup = 1
         End If
 
-        ' Подзаголовок группы (если групп > 1)
+        ' ГЏГ®Г¤Г§Г ГЈГ®Г«Г®ГўГ®ГЄ ГЈГ°ГіГЇГЇГ» (ГҐГ±Г«ГЁ ГЈГ°ГіГЇГЇ > 1)
         If Not groupsAlwaysOne Then
             If currentSubGroup <> previousSubGroup Then
                 dstSheet.Cells(dstRow, 1).Value = UCase(currentSubGroup)
@@ -246,45 +294,60 @@ previousSubGroup = vbNullString
             End If
         End If
 
-        ' Строка студента (с номером)
+        ' Г‘ГІГ°Г®ГЄГ  Г±ГІГіГ¤ГҐГ­ГІГ  (Г± Г­Г®Г¬ГҐГ°Г®Г¬)
         dstSheet.Cells(dstRow, 1).Value = numInGroup
 
         If groupsAlwaysOne Then
-            ' Копируем поля Заявка..Время (A..H -> 2..9)
-            dstSheet.Range(dstSheet.Cells(dstRow, 2), dstSheet.Cells(dstRow, 9)).Value = _
-                tempSheet.Range(tempSheet.Cells(i, 1), tempSheet.Cells(i, 8)).Value
-            ' Работодатель, если нужен
-            If employersPresent Then dstSheet.Cells(dstRow, 10).Value = tempSheet.Cells(i, 10).Value
-        Else
-            ' Копируем поля Заявка..Группа (A..I -> 2..10)
-            dstSheet.Range(dstSheet.Cells(dstRow, 2), dstSheet.Cells(dstRow, 10)).Value = _
-                tempSheet.Range(tempSheet.Cells(i, 1), tempSheet.Cells(i, 9)).Value
-            ' Работодатель, если нужен
-            If employersPresent Then dstSheet.Cells(dstRow, 11).Value = tempSheet.Cells(i, 10).Value
-        End If
+    dateColIndex = 4
+    timeColIndex = 9
+    phoneColIndex = 5
 
-        numInGroup = numInGroup + 1
-        dstRow = dstRow + 1
-    Next i
+    removeDateColumn = hasTestDate And singleTestDate
+    removeTimeColumn = hasTestTime And singleTestTime
 
-    ' Удаляем временный лист
-    Application.DisplayAlerts = False
-    On Error Resume Next
-    tempSheet.Delete
-    On Error GoTo 0
-    Application.DisplayAlerts = True
+    If removeDateColumn Then
+        dstSheet.Columns(dateColIndex).Delete
+        lastColOut = lastColOut - 1
+        If timeColIndex > dateColIndex Then timeColIndex = timeColIndex - 1
+        If phoneColIndex > dateColIndex Then phoneColIndex = phoneColIndex - 1
+    End If
 
-    ' Финальное форматирование
-    dstSheet.Columns.AutoFit
-    dstSheet.Rows(1).Font.Bold = True
+    If removeTimeColumn Then
+        dstSheet.Columns(timeColIndex).Delete
+        lastColOut = lastColOut - 1
+    End If
+
+    dstSheet.Columns("A").HorizontalAlignment = xlCenter
     dstSheet.Range(dstSheet.Cells(1, 1), dstSheet.Cells(1, lastColOut)).Interior.Color = RGB(200, 200, 200)
-    dstSheet.Rows(1).HorizontalAlignment = xlCenter
-    dstSheet.Columns("D").NumberFormat = "dd.mm.yyyy" ' ДР
-    dstSheet.Columns("I").NumberFormat = "hh:mm"       ' Время (I в любом варианте)
-    dstSheet.Columns("A").HorizontalAlignment = xlCenter ' номера по центру
-    dstSheet.Columns("E").NumberFormat = "@"            ' Телефон как текст
 
-    ' Границы по всей итоговой таблице
+    If Not removeDateColumn Then
+        dstSheet.Columns(dateColIndex).NumberFormat = "dd.mm.yyyy"
+    End If
+    If Not removeTimeColumn Then
+        dstSheet.Columns(timeColIndex).NumberFormat = "hh:mm"
+    End If
+    dstSheet.Columns(phoneColIndex).NumberFormat = "@"
+    headerText = "  "
+    If dictExam.Count = 1 Then
+        onlyExam = Trim$(CStr(dictExam.Keys()(0)))
+        If Len(onlyExam) > 0 Then headerText = headerText & " " & UCase$(onlyExam)
+    End If
+
+        If removeDateColumn Then
+            headerText = headerText & "  " & Format$(minTestDate, "dd.mm.yyyy")
+            headerText = headerText & "  " & Format$(minTestDate, "dd.mm.yyyy") & " - " & Format$(maxTestDate, "dd.mm.yyyy")
+    If removeTimeColumn Then
+        headerText = headerText & "  " & Format$(minTestTime, "hh:mm")
+
+    Dim titleOverride As String
+    titleOverride = headerText
+
+    ' :
+    AddScheduleHeader dstSheet, lastColOut, dstRow - 1, , , titleOverride
+    dstSheet.Columns("A").HorizontalAlignment = xlCenter ' Г­Г®Г¬ГҐГ°Г  ГЇГ® Г¶ГҐГ­ГІГ°Гі
+    dstSheet.Columns("E").NumberFormat = "@"            ' Г’ГҐГ«ГҐГґГ®Г­ ГЄГ ГЄ ГІГҐГЄГ±ГІ
+
+    ' ГѓГ°Г Г­ГЁГ¶Г» ГЇГ® ГўГ±ГҐГ© ГЁГІГ®ГЈГ®ГўГ®Г© ГІГ ГЎГ«ГЁГ¶ГҐ
     With dstSheet.Range(dstSheet.Cells(1, 1), dstSheet.Cells(dstRow - 1, lastColOut)).Borders
         .LineStyle = xlContinuous
         .Weight = xlThin
@@ -292,14 +355,14 @@ previousSubGroup = vbNullString
     End With
 
     
-    ' Подготовим titleOverride и удалим столбец Экзамен, если он один
+    ' ГЏГ®Г¤ГЈГ®ГІГ®ГўГЁГ¬ titleOverride ГЁ ГіГ¤Г Г«ГЁГ¬ Г±ГІГ®Г«ГЎГҐГ¶ ГќГЄГ§Г Г¬ГҐГ­, ГҐГ±Г«ГЁ Г®Г­ Г®Г¤ГЁГ­
     Dim titleOverride As String
     Dim datePart As String
     If hasTestDate Then
         If minTestDate <> maxTestDate Then
-            datePart = " НА " & Format(minTestDate, "dd.mm.yyyy") & " - " & Format(maxTestDate, "dd.mm.yyyy")
+            datePart = " ГЌГЂ " & Format(minTestDate, "dd.mm.yyyy") & " - " & Format(maxTestDate, "dd.mm.yyyy")
         Else
-            datePart = " НА " & Format(minTestDate, "dd.mm.yyyy")
+            datePart = " ГЌГЂ " & Format(minTestDate, "dd.mm.yyyy")
         End If
     Else
         datePart = ""
@@ -308,28 +371,28 @@ previousSubGroup = vbNullString
     Dim exColHeader As Long: exColHeader = 0
     Dim c As Long
     For c = 1 To lastColOut
-        If Trim$(CStr(dstSheet.Cells(1, c).Value)) = "Экзамен" Then exColHeader = c: Exit For
+        If Trim$(CStr(dstSheet.Cells(1, c).Value)) = "ГќГЄГ§Г Г¬ГҐГ­" Then exColHeader = c: Exit For
     Next c
 
     If dictExam.Count = 1 Then
         onlyExam = dictExam.Keys()(0)
-        titleOverride = "РАСПИСАНИЕ НА ЭКЗАМЕН " & UCase$(onlyExam) & datePart
+        titleOverride = "ГђГЂГ‘ГЏГ€Г‘ГЂГЌГ€Г… ГЌГЂ ГќГЉГ‡ГЂГЊГ…ГЌ " & UCase$(onlyExam) & datePart
         If exColHeader > 0 Then
             dstSheet.Columns(exColHeader).Delete
             lastColOut = lastColOut - 1
         End If
     Else
-        titleOverride = "РАСПИСАНИЕ" & datePart
+        titleOverride = "ГђГЂГ‘ГЏГ€Г‘ГЂГЌГ€Г…" & datePart
     End If
 app.ScreenUpdating = True
-    ' Добавлено: шапка расписания
+    ' Г„Г®ГЎГ ГўГ«ГҐГ­Г®: ГёГ ГЇГЄГ  Г°Г Г±ГЇГЁГ±Г Г­ГЁГї
     On Error Resume Next
     Call AddScheduleHeader(dstSheet, lastColOut, dstRow - 1, IIf(hasTestDate, minTestDate, Empty), IIf(hasTestDate, maxTestDate, Empty), titleOverride), IIf(hasTestDate, maxTestDate, Empty), titleOverride)
     On Error GoTo 0
-    MsgBox "Расписание готово"
+    MsgBox "ГђГ Г±ГЇГЁГ±Г Г­ГЁГҐ ГЈГ®ГІГ®ГўГ®"
 End Sub
 
-' === Добавлено: Шапка "РАСПИСАНИЕ НА ДД.ММ.ГГГГ" ===
+' === Г„Г®ГЎГ ГўГ«ГҐГ­Г®: ГГ ГЇГЄГ  "ГђГЂГ‘ГЏГ€Г‘ГЂГЌГ€Г… ГЌГЂ Г„Г„.ГЊГЊ.ГѓГѓГѓГѓ" ===
 Private Function DarkenColor(ByVal clr As Long, Optional ByVal factor As Double = 0.85) As Long
     Dim r As Long, g As Long, b As Long
     r = (clr And &HFF)
@@ -354,9 +417,9 @@ Private Sub AddScheduleHeader(ByVal dstSheet As Worksheet, ByRef lastColOut As L
     Dim dictEx As Object: Set dictEx = CreateObject("Scripting.Dictionary")
     
     
-    ' При наличии заранее собранного заголовка — используем его и не сканируем таблицу
+    ' ГЏГ°ГЁ Г­Г Г«ГЁГ·ГЁГЁ Г§Г Г°Г Г­ГҐГҐ Г±Г®ГЎГ°Г Г­Г­Г®ГЈГ® Г§Г ГЈГ®Г«Г®ГўГЄГ  вЂ” ГЁГ±ГЇГ®Г«ГјГ§ГіГҐГ¬ ГҐГЈГ® ГЁ Г­ГҐ Г±ГЄГ Г­ГЁГ°ГіГҐГ¬ ГІГ ГЎГ«ГЁГ¶Гі
     If Len(titleOverride) > 0 Then
-        ' Вставим строку сверху
+        ' Г‚Г±ГІГ ГўГЁГ¬ Г±ГІГ°Г®ГЄГі Г±ГўГҐГ°ГµГі
         dstSheet.Rows(headerRow).Insert Shift:=xlDown
         With dstSheet.Range(dstSheet.Cells(headerRow, 1), dstSheet.Cells(headerRow, lastColOut))
             .Merge
@@ -378,27 +441,27 @@ Private Sub AddScheduleHeader(ByVal dstSheet As Worksheet, ByRef lastColOut As L
         Exit Sub
     End If
 
-' Найдём колонки по заголовкам
+' ГЌГ Г©Г¤ВёГ¬ ГЄГ®Г«Г®Г­ГЄГЁ ГЇГ® Г§Г ГЈГ®Г«Г®ГўГЄГ Г¬
     For c = 1 To lastColOut
-        If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "Дата тестирования" Then dtCol = c
-        If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "Экзамен" Then exCol = c
+        If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "Г„Г ГІГ  ГІГҐГ±ГІГЁГ°Г®ГўГ Г­ГЁГї" Then dtCol = c
+        If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "ГќГЄГ§Г Г¬ГҐГ­" Then exCol = c
     Next c
     If dtCol = 0 Then
         findRow = 2
         For c = 1 To lastColOut
-            If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "Дата тестирования" Then dtCol = c
-            If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "Экзамен" Then exCol = c
+            If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "Г„Г ГІГ  ГІГҐГ±ГІГЁГ°Г®ГўГ Г­ГЁГї" Then dtCol = c
+            If Trim$(CStr(dstSheet.Cells(findRow, c).Value)) = "ГќГЄГ§Г Г¬ГҐГ­" Then exCol = c
         Next c
     End If
     
-    ' Если даты переданы параметрами — используем их
+    ' Г…Г±Г«ГЁ Г¤Г ГІГ» ГЇГҐГ°ГҐГ¤Г Г­Г» ГЇГ Г°Г Г¬ГҐГІГ°Г Г¬ГЁ вЂ” ГЁГ±ГЇГ®Г«ГјГ§ГіГҐГ¬ ГЁГµ
     If IsDate(dtMin) And IsDate(dtMax) Then
         minDate = CDate(dtMin)
         maxDate = CDate(dtMax)
         hasDate = True
     End If
 
-    ' Соберём диапазон дат и множество экзаменов
+    ' Г‘Г®ГЎГҐГ°ВёГ¬ Г¤ГЁГ ГЇГ Г§Г®Г­ Г¤Г ГІ ГЁ Г¬Г­Г®Г¦ГҐГ±ГІГўГ® ГЅГЄГ§Г Г¬ГҐГ­Г®Гў
     If dtCol > 0 Then
         For r = findRow + 1 To lastDataRow
             dtVal = dstSheet.Cells(r, dtCol).Value
@@ -420,33 +483,33 @@ Private Sub AddScheduleHeader(ByVal dstSheet As Worksheet, ByRef lastColOut As L
         Next r
     End If
     
-    ' Если экзамен один — удалим столбец "Экзамен"
+    ' Г…Г±Г«ГЁ ГЅГЄГ§Г Г¬ГҐГ­ Г®Г¤ГЁГ­ вЂ” ГіГ¤Г Г«ГЁГ¬ Г±ГІГ®Г«ГЎГҐГ¶ "ГќГЄГ§Г Г¬ГҐГ­"
     Dim titleExamPart As String: titleExamPart = ""
     If dictEx.Count = 1 And exCol > 0 Then
         Dim onlyExam As String
         onlyExam = dictEx.Keys()(0)
-        titleExamPart = " НА ЭКЗАМЕН " & UCase$(onlyExam)
-        ' Удаляем столбец и корректируем ширину
+        titleExamPart = " ГЌГЂ ГќГЉГ‡ГЂГЊГ…ГЌ " & UCase$(onlyExam)
+        ' Г“Г¤Г Г«ГїГҐГ¬ Г±ГІГ®Г«ГЎГҐГ¶ ГЁ ГЄГ®Г°Г°ГҐГЄГІГЁГ°ГіГҐГ¬ ГёГЁГ°ГЁГ­Гі
         dstSheet.Columns(exCol).Delete
         lastColOut = lastColOut - 1
-        If dtCol > exCol Then dtCol = dtCol - 1 ' если Дата правее Экзамена, её индекс сместится
+        If dtCol > exCol Then dtCol = dtCol - 1 ' ГҐГ±Г«ГЁ Г„Г ГІГ  ГЇГ°Г ГўГҐГҐ ГќГЄГ§Г Г¬ГҐГ­Г , ГҐВё ГЁГ­Г¤ГҐГЄГ± Г±Г¬ГҐГ±ГІГЁГІГ±Гї
     End If
     
-    ' Сформируем заголовок: если несколько дат -> диапазон
+    ' Г‘ГґГ®Г°Г¬ГЁГ°ГіГҐГ¬ Г§Г ГЈГ®Г«Г®ГўГ®ГЄ: ГҐГ±Г«ГЁ Г­ГҐГ±ГЄГ®Г«ГјГЄГ® Г¤Г ГІ -> Г¤ГЁГ ГЇГ Г§Г®Г­
     Dim titleText As String
     If hasDate Then
         If minDate <> maxDate Then
-            titleText = "РАСПИСАНИЕ" & titleExamPart & " НА " & Format(minDate, "dd.mm.yyyy") & " - " & Format(maxDate, "dd.mm.yyyy")
+            titleText = "ГђГЂГ‘ГЏГ€Г‘ГЂГЌГ€Г…" & titleExamPart & " ГЌГЂ " & Format(minDate, "dd.mm.yyyy") & " - " & Format(maxDate, "dd.mm.yyyy")
         Else
-            titleText = "РАСПИСАНИЕ" & titleExamPart & " НА " & Format(minDate, "dd.mm.yyyy")
+            titleText = "ГђГЂГ‘ГЏГ€Г‘ГЂГЌГ€Г…" & titleExamPart & " ГЌГЂ " & Format(minDate, "dd.mm.yyyy")
         End If
     Else
-        titleText = "РАСПИСАНИЕ" & titleExamPart
+        titleText = "ГђГЂГ‘ГЏГ€Г‘ГЂГЌГ€Г…" & titleExamPart
     End If
     
-    ' Вставим строку сверху
+    ' Г‚Г±ГІГ ГўГЁГ¬ Г±ГІГ°Г®ГЄГі Г±ГўГҐГ°ГµГі
     dstSheet.Rows(headerRow).Insert Shift:=xlDown
-    ' Объединяем на всю ширину таблицы
+    ' ГЋГЎГєГҐГ¤ГЁГ­ГїГҐГ¬ Г­Г  ГўГ±Гѕ ГёГЁГ°ГЁГ­Гі ГІГ ГЎГ«ГЁГ¶Г»
     With dstSheet.Range(dstSheet.Cells(headerRow, 1), dstSheet.Cells(headerRow, lastColOut))
         .Merge
         .Value = titleText
@@ -454,12 +517,12 @@ Private Sub AddScheduleHeader(ByVal dstSheet As Worksheet, ByRef lastColOut As L
         .VerticalAlignment = xlCenter
         .Font.Bold = True
         .RowHeight = 24
-        ' Цвет: чуть темнее, чем нижняя строка
+        ' Г–ГўГҐГІ: Г·ГіГІГј ГІГҐГ¬Г­ГҐГҐ, Г·ГҐГ¬ Г­ГЁГ¦Г­ГїГї Г±ГІГ°Г®ГЄГ 
         Dim belowColor As Long
         belowColor = dstSheet.Range(dstSheet.Cells(headerRow + 1, 1), dstSheet.Cells(headerRow + 1, lastColOut)).Interior.Color
-        If belowColor = 0 Then belowColor = RGB(200, 200, 200) ' запасной вариант
+        If belowColor = 0 Then belowColor = RGB(200, 200, 200) ' Г§Г ГЇГ Г±Г­Г®Г© ГўГ Г°ГЁГ Г­ГІ
         .Interior.Color = DarkenColor(belowColor, 0.85)
-        ' Границы вокруг объединённой ячейки
+        ' ГѓГ°Г Г­ГЁГ¶Г» ГўГ®ГЄГ°ГіГЈ Г®ГЎГєГҐГ¤ГЁГ­ВёГ­Г­Г®Г© ГїГ·ГҐГ©ГЄГЁ
         With .Borders
             .LineStyle = xlContinuous
             .Weight = xlThin
@@ -469,5 +532,5 @@ Private Sub AddScheduleHeader(ByVal dstSheet As Worksheet, ByRef lastColOut As L
     
     Exit Sub
 AddHeaderFail:
-    ' Если что-то пошло не так, тихо пропускаем
+    ' Г…Г±Г«ГЁ Г·ГІГ®-ГІГ® ГЇГ®ГёГ«Г® Г­ГҐ ГІГ ГЄ, ГІГЁГµГ® ГЇГ°Г®ГЇГіГ±ГЄГ ГҐГ¬
 End Sub
